@@ -109,7 +109,7 @@
       FNF → Gpop (s2) quick rules
       - Map both sides to PRESS lanes only (0,2,4,6). No release lanes emitted.
       - Each note becomes a single tap at its start (holds become taps).
-      - Optional: endTime nudged −1ms for picky viewers.
+      - Optional: endTime nudged −1ms
     */
 
     const HEADER = {"type":"s2","dict":{"a":0,"a1":1,"s":2,"s1":3,"d":4,"d1":5,"f":6,"f1":7}};
@@ -131,7 +131,7 @@
 
     let fileHandle = null, fileNameBase = 'output';
 
-    // Show global errors in the log (even if Show debug log is off)
+    // Show global errors in the log
     window.addEventListener('error', (e) => log('Runtime error: ' + (e.message || e.error || e), true));
     window.addEventListener('unhandledrejection', (e) => log('Unhandled rejection: ' + (e.reason && e.reason.message ? e.reason.message : e.reason), true));
 
@@ -222,7 +222,7 @@ Tail → ${JSON.stringify(tail)}`
       return { t, nd, sus: Math.max(0, sus) };
     }
 
-// Decide if a note belongs to the requested side for THIS section.
+// Decide if a note belongs to the requested side for this section.
 // Convention used here:
 // - If mustHitSection === true: BF uses 0..3, OPP uses 4..7
 // - If mustHitSection === false: BF uses 4..7, OPP uses 0..3
@@ -264,9 +264,7 @@ function extractEvents(src, side){
 
       const col = nd % 4;               // 0..3
       const pressLane = col * 2;        // 0,2,4,6 (press-only)
-      // Track first-note times for anchor options
       if (side === 'both') {
-        // When exporting both, still record who likely owns the lane this section
         if (belongsToSide(nd, 'bf', mustHit))  bfTimes.push(t);
         if (belongsToSide(nd, 'opp', mustHit)) oppTimes.push(t);
       } else if (side === 'bf') {
@@ -311,7 +309,6 @@ function extractEvents(src, side){
         lastT = e.t;
       }
 
-      // End time (optionally nudged −1ms)
       if (opts.nudge) {
         const tick = opts.seconds ? 0.001 : 1;
         const nudged = opts.seconds ? Number((lastT - tick).toFixed(3)) : (lastT - tick);
@@ -322,29 +319,49 @@ function extractEvents(src, side){
       return out;
     }
 
-    function convertFNFToGpop(raw, opts){
-      const src = loadFNF(raw);
-      const sides = (opts.side === 'both') ? ['bf','opp'] : [opts.side];
 
-      const allEvents = []; const bfTimes = []; const oppTimes = [];
-      for (const s of sides) {
-        const { events, bfTimes: b, oppTimes: o } = extractEvents(src, s);
-        allEvents.push(...events);
-        bfTimes.push(...b);
-        oppTimes.push(...o);
-      }
+function addAll(dst, src){
+  for (let i = 0; i < src.length; i++) dst.push(src[i]);
+}
 
-      // Anchor choice
-      let anchorMs = null;
-      if (allEvents.length) {
-        if (opts.anchor === 'bf_start'  && bfTimes.length)  anchorMs = Math.min(...bfTimes);
-        else if (opts.anchor === 'opp_start' && oppTimes.length) anchorMs = Math.min(...oppTimes);
-        else if (opts.anchor === 'none') anchorMs = null;  // respect shift setting
-      }
+function safeMin(arr){
+  if (!arr || arr.length === 0) return null;
+  let m = arr[0];
+  for (let i = 1; i < arr.length; i++) if (arr[i] < m) m = arr[i];
+  return m;
+}
 
-      const output = toGpop(allEvents, opts, anchorMs);
-      return { output, noteCount: allEvents.length };
+function convertFNFToGpop(raw, opts){
+  const src = loadFNF(raw);
+  const sides = (opts.side === 'both') ? ['bf','opp'] : [opts.side];
+
+  const allEvents = [];
+  const bfTimes = [];
+  const oppTimes = [];
+
+  for (const s of sides) {
+    const { events, bfTimes: b, oppTimes: o } = extractEvents(src, s);
+    addAll(allEvents, events);   // was: allEvents.push(...events)
+    addAll(bfTimes,  b);         // was: bfTimes.push(...b)
+    addAll(oppTimes, o);         // was: oppTimes.push(...o)
+  }
+
+  let anchorMs = null;
+  if (allEvents.length) {
+    if (opts.anchor === 'bf_start'  && bfTimes.length) {
+      const m = safeMin(bfTimes);
+      if (m != null) anchorMs = m;
+    } else if (opts.anchor === 'opp_start' && oppTimes.length) {
+      const m = safeMin(oppTimes);
+      if (m != null) anchorMs = m;
+    } else if (opts.anchor === 'none') {
+      anchorMs = null; // respect shift later
     }
+  }
+
+  const output = toGpop(allEvents, opts, anchorMs);
+  return { output, noteCount: allEvents.length };
+}
   </script>
 </body>
 </html>
