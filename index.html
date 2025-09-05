@@ -6,14 +6,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root { --pad: 14px; --radius: 10px; }
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; line-height: 1.4; margin: 0; background: #0b0c10; color: #e8e8e8; }
+    html { background: #0b0c10; }
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      line-height: 1.4; margin: 0;
+      background: #0b0c10; color: #e8e8e8;
+    }
     .wrap { max-width: 820px; margin: 40px auto; padding: 0 16px; }
     .card { background: #111319; border: 1px solid #1f2430; border-radius: var(--radius); padding: calc(var(--pad) + 2px); box-shadow: 0 10px 30px rgba(0,0,0,.25); }
     h1 { font-size: 1.6rem; margin: 0 0 14px 0; }
     .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
     .spacer { height: 10px; }
     label { font-weight: 600; }
-    select, input[type="number"], input[type="text"] {
+    select, input[type="number"], input[type="text"], input[type="file"] {
       background: #0f1218; color: #e8e8e8; border: 1px solid #2a3140; border-radius: 8px; padding: 8px 10px;
     }
     .btn {
@@ -22,16 +27,27 @@
     }
     .btn:disabled { opacity: .6; cursor: not-allowed; }
     .hint { color: #9fb0cf; font-size: .95rem; }
-    .out { margin-top: 12px; padding: 10px; border: 1px dashed #2a3140; border-radius: 8px; background: #0f1218; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .95rem; }
+    .out { white-space: pre-line; margin-top: 12px; padding: 10px; border: 1px dashed #2a3140; border-radius: 8px; background: #0f1218; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .95rem; display:none; }
     a.download { display: inline-block; margin-top: 10px; text-decoration: none; font-weight: 700; color: #5b8cff; }
     .tag { display:inline-block; padding:2px 8px; border-radius:999px; border:1px solid #2a3140; font-size:.85rem; color:#cdd9f0; }
+
+    details.adv {
+      border: 1px solid #1f2430; border-radius: 8px; background:#0f1218; padding: 8px 10px;
+    }
+    details.adv summary {
+      cursor: pointer; font-weight: 700; color:#cdd9f0; list-style: none;
+    }
+    details.adv summary::-webkit-details-marker { display: none; }
+    details.adv[open] { background:#10141c; }
+    .adv-grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap: 10px; margin-top: 10px; }
+    .adv-grid label { display:flex; align-items:center; gap:8px; font-weight:600; }
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="card">
       <h1>FNF JSON → Gpop (.gpop)</h1>
-      <p class="hint">Choose a Friday Night Funkin’ chart JSON and get a <code>.gpop</code> file</p>
+      <p class="hint">Select a Friday Night Funkin’ chart JSON and export a <code>.gpop</code>.</p>
 
       <div class="spacer"></div>
 
@@ -43,24 +59,16 @@
 
       <div class="spacer"></div>
 
-      <!-- Offset front-and-center -->
       <div class="row">
-        <label for="offset" title="Put when the first notes happen in the audio. Example: 5.3">
-          offset (s):
-        </label>
-        <input id="offset" type="number" step="0.001" inputmode="decimal" placeholder="e.g., 5.300" value="20.000" />
+        <label for="offset" title="When the first notes happen in the audio (e.g., 5.3)">offset (s):</label>
+        <input id="offset" type="number" step="0.001" inputmode="decimal" placeholder="e.g., 5.300" value="0.000" />
       </div>
       <p class="hint">
-        <strong>Song offset</strong> = when the first notes happen in the audio.
-        Example: if the <em>opponent</em> starts singing <code>5.3</code> seconds after the song begins,
-        put <code>5.3</code> here. This value is added after anchoring, so:
-        <br>• Choose the side and anchor you care about (e.g., <code>opp</code> + <code>opp_start</code>),
-        then set the offset to when that singer’s first notes occur in the audio.
-        <br>• Use negative values if your chart’s notes are slightly ahead of the audio.
+        Offset is added after anchoring. Use negative values if notes are slightly ahead of the audio.
       </p>
 
-      <!-- Formerly inside <details> — now always visible -->
       <div class="spacer"></div>
+
       <div class="row">
         <label for="side">Side:</label>
         <select id="side">
@@ -68,26 +76,42 @@
           <option value="opp">opp (opponent)</option>
           <option value="both">both</option>
         </select>
-
-        <label><input id="seconds" type="checkbox" checked /> seconds (uncheck = ms)</label>
-        <label><input id="shift" type="checkbox" checked /> shift start to 0</label>
-
-        <label for="anchor">anchor:</label>
-        <select id="anchor">
-          <option value="">auto</option>
-          <option value="bf_start">bf_start</option>
-          <option value="opp_start">opp_start</option>
-          <option value="none">none</option>
-        </select>
       </div>
 
-      <div id="log" class="out" style="display:none;"></div>
+      <div class="spacer"></div>
+
+      <details class="adv">
+        <summary>Advanced Options</summary>
+        <div class="adv-grid">
+          <label><input id="seconds" type="checkbox" checked /> Output in seconds (3 dp)</label>
+          <label><input id="shift" type="checkbox" checked /> Shift start to earliest note</label>
+          <label>
+            anchor:&nbsp;
+            <select id="anchor">
+              <option value="">auto</option>
+              <option value="bf_start">bf_start (first BF note)</option>
+              <option value="opp_start">opp_start (first Opp note)</option>
+              <option value="none">none</option>
+            </select>
+          </label>
+          <label><input id="nudge" type="checkbox" /> Nudge end −1ms (compatibility)</label>
+          <label><input id="showlog" type="checkbox" /> Show debug log</label>
+        </div>
+      </details>
+
+      <div id="log" class="out"></div>
       <a id="dl" class="download" style="display:none;">Download .gpop</a>
     </div>
   </div>
 
   <script>
-    // Header constant
+    /*
+      FNF → Gpop (s2) quick rules
+      - Map both sides to PRESS lanes only (0,2,4,6). No release lanes emitted.
+      - Each note becomes a single tap at its start (holds become taps).
+      - Optional: endTime nudged −1ms for picky viewers.
+    */
+
     const HEADER = {"type":"s2","dict":{"a":0,"a1":1,"s":2,"s1":3,"d":4,"d1":5,"f":6,"f1":7}};
 
     const els = {
@@ -99,20 +123,21 @@
       shift: document.getElementById('shift'),
       anchor: document.getElementById('anchor'),
       offset: document.getElementById('offset'),
+      nudge:  document.getElementById('nudge'),
+      showlog: document.getElementById('showlog'),
       log: document.getElementById('log'),
       dl: document.getElementById('dl')
     };
 
-    let fileHandle = null;
-    let fileNameBase = 'output';
+    let fileHandle = null, fileNameBase = 'output';
+
+    // Show global errors in the log (even if Show debug log is off)
+    window.addEventListener('error', (e) => log('Runtime error: ' + (e.message || e.error || e), true));
+    window.addEventListener('unhandledrejection', (e) => log('Unhandled rejection: ' + (e.reason && e.reason.message ? e.reason.message : e.reason), true));
 
     els.file.addEventListener('change', () => {
       const f = els.file.files[0];
-      if (!f) {
-        els.status.textContent = 'No file';
-        els.convert.disabled = true;
-        return;
-      }
+      if (!f) { els.status.textContent = 'No file'; els.convert.disabled = true; return; }
       fileHandle = f;
       fileNameBase = f.name.replace(/\.[^.]+$/,'') || 'chart';
       els.status.textContent = `Loaded: ${f.name}`;
@@ -124,20 +149,19 @@
       if (!fileHandle) return;
       try {
         setBusy(true);
-        const text = await fileHandle.text();
-        const src = JSON.parse(text);
+        const src = JSON.parse(await fileHandle.text());
 
         const opts = {
-          side: els.side.value,                               // 'bf' | 'opp' | 'both'
-          seconds: !!els.seconds.checked,                     // true -> seconds, false -> ms
-          shift: !!els.shift.checked,                         // shift to earliest
-          anchor: els.anchor.value || null,                   // 'bf_start' | 'opp_start' | 'none' | null (auto)
-          offset: parseFloat(els.offset.value || '0') || 0    // seconds (can be negative)
+          side: els.side.value,
+          seconds: !!els.seconds.checked,
+          shift: !!els.shift.checked,
+          anchor: els.anchor.value || null,
+          offset: parseFloat(els.offset.value || '0') || 0,
+          nudge:  !!els.nudge.checked
         };
 
         const res = convertFNFToGpop(src, opts);
 
-        // Build download
         const json = JSON.stringify(res.output, null, 0);
         const blob = new Blob([json], {type: 'application/json'});
         const url = URL.createObjectURL(blob);
@@ -148,7 +172,12 @@
         els.dl.style.display = 'inline-block';
         els.dl.textContent = `Download ${outName}`;
 
-        log(`Wrote ${outName} with ${res.noteCount} notes. Units: ${opts.seconds ? 'seconds' : 'ms'}. Shifted: ${opts.shift}. Anchor: ${opts.anchor ?? 'auto'}. Offset: ${opts.offset.toFixed(3)}s`);
+        const tail = res.output.slice(Math.max(0, res.output.length - 20));
+        info(
+`Wrote ${outName} with ${res.noteCount} notes.
+Units: ${opts.seconds ? 'seconds' : 'ms'} | Shifted: ${opts.shift} | Anchor: ${opts.anchor ?? 'auto'} | Offset: ${opts.offset.toFixed(3)}s | Nudge: ${opts.nudge}
+Tail → ${JSON.stringify(tail)}`
+        );
       } catch (e) {
         log('Error: ' + (e && e.message ? e.message : e), true);
         hideResult();
@@ -157,134 +186,130 @@
       }
     });
 
-    function hideResult() {
-      els.dl.style.display = 'none';
-      els.log.style.display = 'none';
-    }
-
-    function setBusy(on) {
-      els.convert.disabled = on;
-      els.file.disabled = on;
+    function hideResult(){ els.dl.style.display='none'; if (!els.showlog.checked) els.log.style.display='none'; }
+    function setBusy(on){
+      els.convert.disabled=on; els.file.disabled=on;
       els.status.textContent = on ? 'Converting…' : (fileHandle ? `Loaded: ${fileHandle.name}` : 'No file');
     }
-
-    function log(msg, isErr=false) {
+    function info(msg){ if (!els.showlog.checked) return; els.log.textContent = msg; els.log.style.display='block'; els.log.style.borderColor='#2a3140'; }
+    function log(msg,isErr=false){
       els.log.textContent = msg;
       els.log.style.display = 'block';
       els.log.style.borderColor = isErr ? '#6b2a2a' : '#2a3140';
     }
 
-    // ---- Logic ported from my Python ----
-    function loadFNF(data) {
-      let notes_sections = [];
-      if (data && typeof data === 'object' && 'song' in data && typeof data.song === 'object') {
-        const song = data.song;
-        notes_sections = Array.isArray(song.notes) ? song.notes : [];
-      } else {
-        notes_sections = Array.isArray(data?.notes) ? data.notes : [];
-      }
-      return { sections: notes_sections, raw: data };
+    // ---------- Parse ----------
+    function loadFNF(data){
+      if (data?.song?.notes) return { sections: data.song.notes, raw: data };
+      if (Array.isArray(data?.notes)) return { sections: data.notes, raw: data };
+      if (Array.isArray(data)) return { sections: data, raw: data };
+      return { sections: [], raw: data };
     }
 
-    function extractPairs(src, side /* 'bf' | 'opp' | 'both' */) {
-      // returns array of {t, lane, tag:'bf'|'opp'}
-      const out = [];
-      const sections = src.sections || [];
-      for (const sec of sections) {
-        const section_notes = (sec && typeof sec === 'object' && 'sectionNotes' in sec)
-          ? sec.sectionNotes
-          : sec;
-        if (!Array.isArray(section_notes)) continue;
+    // Return {t, nd, sus} (sus is sustain length in ms; ignored here)
+    function readNoteTriple(n){
+      let t = NaN, nd = NaN, sus = 0;
+      if (Array.isArray(n)) {
+        if (n.length >= 2) { t = Number(n[0]); nd = Number(n[1]); }
+        if (n.length >= 3 && Number.isFinite(Number(n[2]))) sus = Number(n[2]);
+      } else if (n && typeof n === 'object') {
+        t  = Number( ('strumTime' in n) ? n.strumTime : ('time' in n ? n.time : NaN) );
+        nd = Number( ('noteData' in n) ? n.noteData  : ('note' in n ? n.note : NaN) );
+        const cand = n.sustainLength ?? n.sustain ?? n.hold ?? n.length ?? n.duration;
+        if (cand != null && Number.isFinite(Number(cand))) sus = Number(cand);
+      }
+      if (!Number.isFinite(t) || !Number.isFinite(nd)) return null;
+      return { t, nd, sus: Math.max(0, sus) };
+    }
 
-        for (const n of section_notes) {
-          if (!Array.isArray(n) || n.length < 2) continue;
-          let t = Number(n[0]);
-          let nd = Number(n[1]);
-          if (!isFinite(t) || !isFinite(nd)) continue;
+    // PRESS-ONLY events (map columns 0..3 → lanes 0,2,4,6 for both sides)
+    function extractEvents(src, side){
+      const events = []; const bfTimes = []; const oppTimes = [];
+      for (const sec of (src.sections || [])) {
+        const notes = (sec && typeof sec === 'object' && 'sectionNotes' in sec) ? sec.sectionNotes : sec;
+        if (!Array.isArray(notes)) continue;
+        for (const n of notes) {
+          const got = readNoteTriple(n); if (!got) continue;
+          let { t, nd } = got;
+          nd = ((nd % 8) + 8) % 8;
+          const isLeft  = nd < 4;   // opponent
+          const isRight = nd >= 4;  // bf
+          if (side === 'bf'  && !isRight) continue;
+          if (side === 'opp' && !isLeft)  continue;
 
-          // normalize 0..7
-          if (nd < 0 || nd >= 8) nd = ((nd % 8) + 8) % 8;
-
-          const is_left = nd < 4;
-          const is_right = nd >= 4;
-
-          if (side === 'bf' && !is_right) continue;
-          if (side === 'opp' && !is_left) continue;
-
-          let lane;
-          if (is_left) {
-            lane = 1 + 2*nd;     // 0,1,2,3 -> 1,3,5,7
-          } else {
-            lane = 2 * (nd - 4); // 4,5,6,7 -> 0,2,4,6
-          }
-          out.push({ t, lane, tag: is_right ? 'bf' : 'opp' });
+          const col = nd % 4;        // 0..3
+          const pressLane = col * 2; // 0,2,4,6
+          if (isRight) bfTimes.push(t); else oppTimes.push(t);
+          events.push({ t, lane: pressLane });
         }
       }
-      return out;
+      return { events, bfTimes, oppTimes };
     }
 
-    function toGpop(pairs_ms, opts, anchor_ms /* number|null */) {
-      if (!pairs_ms.length) {
-        return [HEADER, opts.seconds ? 0.0 : 0];
-      }
+    // ---------- Build Gpop ----------
+    function toGpop(allEvents, opts, anchorMs) {
+      if (!allEvents.length) return [HEADER, opts.seconds ? 0.0 : 0];
 
-      pairs_ms.sort((a, b) => (a.t - b.t) || (a.lane - b.lane));
+      // Sort raw ms
+      allEvents.sort((a,b)=> (a.t - b.t) || (a.lane - b.lane));
 
-      const anchor = (anchor_ms != null) ? anchor_ms : (opts.shift ? pairs_ms[0].t : 0);
+      // Anchor
+      const anchor = (anchorMs != null) ? anchorMs : (opts.shift ? allEvents[0].t : 0);
 
+      // Convert, sort again after rounding, de-dupe exact collisions
+      const converted = allEvents.map(ev => {
+        const dt = ev.t - anchor;
+        const tVal = opts.seconds ? Number(((dt / 1000) + opts.offset).toFixed(3))
+                                  : Math.round(dt + opts.offset * 1000);
+        return { lane: ev.lane, t: tVal };
+      });
+      converted.sort((a,b)=> (a.t - b.t) || (a.lane - b.lane));
+
+      const seen = new Set();
       const out = [HEADER];
-      for (const {t, lane} of pairs_ms) {
-        let t_val = t - anchor;
-        if (opts.seconds) {
-          t_val = +( (t_val / 1000.0) + opts.offset ).toFixed(3);
-        } else {
-          t_val = Math.round(t_val + opts.offset * 1000.0);
-        }
-        out.push(lane, t_val);
+      let lastT = opts.seconds ? 0.0 : 0;
+
+      for (const e of converted) {
+        const key = `${e.lane}|${e.t}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(e.lane, e.t);
+        lastT = e.t;
       }
-      const last_t = pairs_ms[pairs_ms.length - 1].t - anchor;
-      const end_time = opts.seconds ? +((last_t/1000.0) + opts.offset).toFixed(3) : Math.round(last_t + opts.offset*1000.0);
-      out.push(end_time);
+
+      // End time (optionally nudged −1ms)
+      if (opts.nudge) {
+        const tick = opts.seconds ? 0.001 : 1;
+        const nudged = opts.seconds ? Number((lastT - tick).toFixed(3)) : (lastT - tick);
+        out.push(Math.max(0, nudged));
+      } else {
+        out.push(lastT);
+      }
       return out;
     }
 
-    function convertFNFToGpop(raw, opts) {
+    function convertFNFToGpop(raw, opts){
       const src = loadFNF(raw);
-
       const sides = (opts.side === 'both') ? ['bf','opp'] : [opts.side];
-      const mergedKey = new Map();       // key "t|lane" -> true
-      const pairs = [];                  // list of unique {t,lane}
-      const bf_times = [];
-      const opp_times = [];
 
+      const allEvents = []; const bfTimes = []; const oppTimes = [];
       for (const s of sides) {
-        const pts = extractPairs(src, s);
-        for (const p of pts) {
-          const key = `${p.t}|${p.lane}`;
-          if (!mergedKey.has(key)) {
-            mergedKey.set(key, true);
-            pairs.push({ t: p.t, lane: p.lane });
-          }
-          if (p.tag === 'bf') bf_times.push(p.t);
-          if (p.tag === 'opp') opp_times.push(p.t);
-        }
+        const { events, bfTimes: b, oppTimes: o } = extractEvents(src, s);
+        allEvents.push(...events);
+        bfTimes.push(...b);
+        oppTimes.push(...o);
       }
 
-      let anchor_ms = null;
-      if (pairs.length) {
-        if (opts.anchor === 'bf_start' && bf_times.length) {
-          anchor_ms = Math.min(...bf_times);
-        } else if (opts.anchor === 'opp_start' && opp_times.length) {
-          anchor_ms = Math.min(...opp_times);
-        } else if (opts.anchor === 'none') {
-          anchor_ms = null; // respect shift flag later
-        } else {
-          anchor_ms = null; // auto
-        }
+      // Anchor choice
+      let anchorMs = null;
+      if (allEvents.length) {
+        if (opts.anchor === 'bf_start'  && bfTimes.length)  anchorMs = Math.min(...bfTimes);
+        else if (opts.anchor === 'opp_start' && oppTimes.length) anchorMs = Math.min(...oppTimes);
+        else if (opts.anchor === 'none') anchorMs = null;  // respect shift setting
       }
 
-      const output = toGpop(pairs, opts, anchor_ms);
-      return { output, noteCount: pairs.length };
+      const output = toGpop(allEvents, opts, anchorMs);
+      return { output, noteCount: allEvents.length };
     }
   </script>
 </body>
