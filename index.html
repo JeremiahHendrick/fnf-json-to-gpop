@@ -222,29 +222,63 @@ Tail → ${JSON.stringify(tail)}`
       return { t, nd, sus: Math.max(0, sus) };
     }
 
-    // PRESS-ONLY events (map columns 0..3 → lanes 0,2,4,6 for both sides)
-    function extractEvents(src, side){
-      const events = []; const bfTimes = []; const oppTimes = [];
-      for (const sec of (src.sections || [])) {
-        const notes = (sec && typeof sec === 'object' && 'sectionNotes' in sec) ? sec.sectionNotes : sec;
-        if (!Array.isArray(notes)) continue;
-        for (const n of notes) {
-          const got = readNoteTriple(n); if (!got) continue;
-          let { t, nd } = got;
-          nd = ((nd % 8) + 8) % 8;
-          const isLeft  = nd < 4;   // opponent
-          const isRight = nd >= 4;  // bf
-          if (side === 'bf'  && !isRight) continue;
-          if (side === 'opp' && !isLeft)  continue;
+// Decide if a note belongs to the requested side for THIS section.
+// Convention used here:
+// - If mustHitSection === true: BF uses 0..3, OPP uses 4..7
+// - If mustHitSection === false: BF uses 4..7, OPP uses 0..3
+// If mustHitSection is missing, fall back to: OPP = 0..3, BF = 4..7
+function belongsToSide(nd, side, mustHit) {
+  const left = nd < 4; // 0..3
+  if (mustHit === true) {
+    // Player (BF) on LEFT this section
+    if (side === 'bf')  return left;     // 0..3
+    if (side === 'opp') return !left;    // 4..7
+  } else if (mustHit === false) {
+    // Player (BF) on RIGHT this section
+    if (side === 'bf')  return !left;    // 4..7
+    if (side === 'opp') return left;     // 0..3
+  } else {
+    // No flag → classic fallback: OPP left, BF right
+    if (side === 'bf')  return !left;    // 4..7
+    if (side === 'opp') return left;     // 0..3
+  }
+  return true; // 'both' path never hits this helper
+}
 
-          const col = nd % 4;        // 0..3
-          const pressLane = col * 2; // 0,2,4,6
-          if (isRight) bfTimes.push(t); else oppTimes.push(t);
-          events.push({ t, lane: pressLane });
-        }
+// PRESS-ONLY events (no release edges). Uses per-section mustHitSection to pick the right group.
+function extractEvents(src, side){
+  const events = []; const bfTimes = []; const oppTimes = [];
+  const sections = src.sections || [];
+
+  for (const sec of sections) {
+    const notes   = (sec && typeof sec === 'object' && 'sectionNotes' in sec) ? sec.sectionNotes : sec;
+    const mustHit = (sec && typeof sec === 'object' && 'mustHitSection' in sec) ? !!sec.mustHitSection : undefined;
+    if (!Array.isArray(notes)) continue;
+
+    for (const n of notes) {
+      const got = readNoteTriple(n); if (!got) continue;
+      let { t, nd } = got;
+
+      nd = ((nd % 8) + 8) % 8;          // normalize
+      if (side !== 'both' && !belongsToSide(nd, side, mustHit)) continue;
+
+      const col = nd % 4;               // 0..3
+      const pressLane = col * 2;        // 0,2,4,6 (press-only)
+      // Track first-note times for anchor options
+      if (side === 'both') {
+        // When exporting both, still record who likely owns the lane this section
+        if (belongsToSide(nd, 'bf', mustHit))  bfTimes.push(t);
+        if (belongsToSide(nd, 'opp', mustHit)) oppTimes.push(t);
+      } else if (side === 'bf') {
+        bfTimes.push(t);
+      } else if (side === 'opp') {
+        oppTimes.push(t);
       }
-      return { events, bfTimes, oppTimes };
+      events.push({ t, lane: pressLane });
     }
+  }
+  return { events, bfTimes, oppTimes };
+}
 
     // ---------- Build Gpop ----------
     function toGpop(allEvents, opts, anchorMs) {
