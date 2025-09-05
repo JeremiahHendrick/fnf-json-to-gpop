@@ -34,9 +34,7 @@
     details.adv {
       border: 1px solid #1f2430; border-radius: 8px; background:#0f1218; padding: 8px 10px;
     }
-    details.adv summary {
-      cursor: pointer; font-weight: 700; color:#cdd9f0; list-style: none;
-    }
+    details.adv summary { cursor: pointer; font-weight: 700; color:#cdd9f0; list-style: none; }
     details.adv summary::-webkit-details-marker { display: none; }
     details.adv[open] { background:#10141c; }
     .adv-grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap: 10px; margin-top: 10px; }
@@ -105,12 +103,9 @@
   </div>
 
   <script>
-    /*
-      FNF → Gpop (s2) quick rules
-      - Map both sides to PRESS lanes only (0,2,4,6). No release lanes emitted.
-      - Each note becomes a single tap at its start (holds become taps).
-      - Optional: endTime nudged −1ms
-    */
+    // Minimal error surfacing (keeps page simple but not silent)
+    window.addEventListener('error', (e) => log('Runtime error: ' + (e.message || e.error || e), true));
+    window.addEventListener('unhandledrejection', (e) => log('Unhandled rejection: ' + (e.reason && e.reason.message ? e.reason.message : e.reason), true));
 
     const HEADER = {"type":"s2","dict":{"a":0,"a1":1,"s":2,"s1":3,"d":4,"d1":5,"f":6,"f1":7}};
 
@@ -131,16 +126,18 @@
 
     let fileHandle = null, fileNameBase = 'output';
 
-    // Show global errors in the log
-    window.addEventListener('error', (e) => log('Runtime error: ' + (e.message || e.error || e), true));
-    window.addEventListener('unhandledrejection', (e) => log('Unhandled rejection: ' + (e.reason && e.reason.message ? e.reason.message : e.reason), true));
+    // Live toggle of the log’s visibility (tiny QoL)
+    els.showlog.addEventListener('change', () => {
+      els.log.style.display = els.showlog.checked ? 'block' : 'none';
+    });
 
     els.file.addEventListener('change', () => {
       const f = els.file.files[0];
       if (!f) { els.status.textContent = 'No file'; els.convert.disabled = true; return; }
       fileHandle = f;
       fileNameBase = f.name.replace(/\.[^.]+$/,'') || 'chart';
-      els.status.textContent = `Loaded: ${f.name}`;
+      const mb = (f.size / 1048576).toFixed(1);
+      els.status.textContent = `Loaded: ${f.name} (${mb} MB)`;
       els.convert.disabled = false;
       hideResult();
     });
@@ -222,80 +219,70 @@ Tail → ${JSON.stringify(tail)}`
       return { t, nd, sus: Math.max(0, sus) };
     }
 
-// Decide if a note belongs to the requested side for this section.
-// Convention used here:
-// - If mustHitSection === true: BF uses 0..3, OPP uses 4..7
-// - If mustHitSection === false: BF uses 4..7, OPP uses 0..3
-// If mustHitSection is missing, fall back to: OPP = 0..3, BF = 4..7
-function belongsToSide(nd, side, mustHit) {
-  const left = nd < 4; // 0..3
-  if (mustHit === true) {
-    // Player (BF) on LEFT this section
-    if (side === 'bf')  return left;     // 0..3
-    if (side === 'opp') return !left;    // 4..7
-  } else if (mustHit === false) {
-    // Player (BF) on RIGHT this section
-    if (side === 'bf')  return !left;    // 4..7
-    if (side === 'opp') return left;     // 0..3
-  } else {
-    // No flag → classic fallback: OPP left, BF right
-    if (side === 'bf')  return !left;    // 4..7
-    if (side === 'opp') return left;     // 0..3
-  }
-  return true; // 'both' path never hits this helper
-}
-
-// PRESS-ONLY events (no release edges). Uses per-section mustHitSection to pick the right group.
-function extractEvents(src, side){
-  const events = []; const bfTimes = []; const oppTimes = [];
-  const sections = src.sections || [];
-
-  for (const sec of sections) {
-    const notes   = (sec && typeof sec === 'object' && 'sectionNotes' in sec) ? sec.sectionNotes : sec;
-    const mustHit = (sec && typeof sec === 'object' && 'mustHitSection' in sec) ? !!sec.mustHitSection : undefined;
-    if (!Array.isArray(notes)) continue;
-
-    for (const n of notes) {
-      const got = readNoteTriple(n); if (!got) continue;
-      let { t, nd } = got;
-
-      nd = ((nd % 8) + 8) % 8;          // normalize
-      if (side !== 'both' && !belongsToSide(nd, side, mustHit)) continue;
-
-      const col = nd % 4;               // 0..3
-      const pressLane = col * 2;        // 0,2,4,6 (press-only)
-      if (side === 'both') {
-        if (belongsToSide(nd, 'bf', mustHit))  bfTimes.push(t);
-        if (belongsToSide(nd, 'opp', mustHit)) oppTimes.push(t);
-      } else if (side === 'bf') {
-        bfTimes.push(t);
-      } else if (side === 'opp') {
-        oppTimes.push(t);
+    // Section-aware side picking
+    function belongsToSide(nd, side, mustHit) {
+      const left = nd < 4; // 0..3
+      if (mustHit === true) {
+        if (side === 'bf')  return left;
+        if (side === 'opp') return !left;
+      } else if (mustHit === false) {
+        if (side === 'bf')  return !left;
+        if (side === 'opp') return left;
+      } else {
+        if (side === 'bf')  return !left;
+        if (side === 'opp') return left;
       }
-      events.push({ t, lane: pressLane });
+      return true; // 'both'
     }
-  }
-  return { events, bfTimes, oppTimes };
-}
 
-    // ---------- Build Gpop ----------
+    // PRESS-ONLY events (0,2,4,6)
+    function extractEvents(src, side){
+      const events = []; const bfTimes = []; const oppTimes = [];
+      const sections = src.sections || [];
+
+      for (const sec of sections) {
+        const notes   = (sec && typeof sec === 'object' && 'sectionNotes' in sec) ? sec.sectionNotes : sec;
+        const mustHit = (sec && typeof sec === 'object' && 'mustHitSection' in sec) ? !!sec.mustHitSection : undefined;
+        if (!Array.isArray(notes)) continue;
+
+        for (const n of notes) {
+          const got = readNoteTriple(n); if (!got) continue;
+          let { t, nd } = got;
+
+          nd = ((nd % 8) + 8) % 8;
+          if (side !== 'both' && !belongsToSide(nd, side, mustHit)) continue;
+
+          const col = nd % 4;               // 0..3
+          const pressLane = col * 2;        // 0,2,4,6
+
+          if (side === 'both') {
+            if (belongsToSide(nd, 'bf', mustHit))  bfTimes.push(t);
+            if (belongsToSide(nd, 'opp', mustHit)) oppTimes.push(t);
+          } else if (side === 'bf') {
+            bfTimes.push(t);
+          } else if (side === 'opp') {
+            oppTimes.push(t);
+          }
+          events.push({ t, lane: pressLane });
+        }
+      }
+      return { events, bfTimes, oppTimes };
+    }
+
+    // Build Gpop
     function toGpop(allEvents, opts, anchorMs) {
       if (!allEvents.length) return [HEADER, opts.seconds ? 0.0 : 0];
 
-      // Sort raw ms
       allEvents.sort((a,b)=> (a.t - b.t) || (a.lane - b.lane));
 
-      // Anchor
       const anchor = (anchorMs != null) ? anchorMs : (opts.shift ? allEvents[0].t : 0);
 
-      // Convert, sort again after rounding, de-dupe exact collisions
       const converted = allEvents.map(ev => {
         const dt = ev.t - anchor;
         const tVal = opts.seconds ? Number(((dt / 1000) + opts.offset).toFixed(3))
                                   : Math.round(dt + opts.offset * 1000);
         return { lane: ev.lane, t: tVal };
-      });
-      converted.sort((a,b)=> (a.t - b.t) || (a.lane - b.lane));
+      }).sort((a,b)=> (a.t - b.t) || (a.lane - b.lane));
 
       const seen = new Set();
       const out = [HEADER];
@@ -319,49 +306,38 @@ function extractEvents(src, side){
       return out;
     }
 
+    function addAll(dst, src){ for (let i = 0; i < src.length; i++) dst.push(src[i]); }
+    function safeMin(arr){ if (!arr || arr.length === 0) return null; let m = arr[0]; for (let i = 1; i < arr.length; i++) if (arr[i] < m) m = arr[i]; return m; }
 
-function addAll(dst, src){
-  for (let i = 0; i < src.length; i++) dst.push(src[i]);
-}
+    function convertFNFToGpop(raw, opts){
+      const src = loadFNF(raw);
+      const sides = (opts.side === 'both') ? ['bf','opp'] : [opts.side];
 
-function safeMin(arr){
-  if (!arr || arr.length === 0) return null;
-  let m = arr[0];
-  for (let i = 1; i < arr.length; i++) if (arr[i] < m) m = arr[i];
-  return m;
-}
+      const allEvents = [];
+      const bfTimes = [];
+      const oppTimes = [];
 
-function convertFNFToGpop(raw, opts){
-  const src = loadFNF(raw);
-  const sides = (opts.side === 'both') ? ['bf','opp'] : [opts.side];
+      for (const s of sides) {
+        const { events, bfTimes: b, oppTimes: o } = extractEvents(src, s);
+        addAll(allEvents, events);
+        addAll(bfTimes,  b);
+        addAll(oppTimes, o);
+      }
 
-  const allEvents = [];
-  const bfTimes = [];
-  const oppTimes = [];
+      let anchorMs = null;
+      if (allEvents.length) {
+        if (opts.anchor === 'bf_start'  && bfTimes.length) {
+          const m = safeMin(bfTimes); if (m != null) anchorMs = m;
+        } else if (opts.anchor === 'opp_start' && oppTimes.length) {
+          const m = safeMin(oppTimes); if (m != null) anchorMs = m;
+        } else if (opts.anchor === 'none') {
+          anchorMs = null; // respect shift later
+        }
+      }
 
-  for (const s of sides) {
-    const { events, bfTimes: b, oppTimes: o } = extractEvents(src, s);
-    addAll(allEvents, events);   // was: allEvents.push(...events)
-    addAll(bfTimes,  b);         // was: bfTimes.push(...b)
-    addAll(oppTimes, o);         // was: oppTimes.push(...o)
-  }
-
-  let anchorMs = null;
-  if (allEvents.length) {
-    if (opts.anchor === 'bf_start'  && bfTimes.length) {
-      const m = safeMin(bfTimes);
-      if (m != null) anchorMs = m;
-    } else if (opts.anchor === 'opp_start' && oppTimes.length) {
-      const m = safeMin(oppTimes);
-      if (m != null) anchorMs = m;
-    } else if (opts.anchor === 'none') {
-      anchorMs = null; // respect shift later
+      const output = toGpop(allEvents, opts, anchorMs);
+      return { output, noteCount: allEvents.length };
     }
-  }
-
-  const output = toGpop(allEvents, opts, anchorMs);
-  return { output, noteCount: allEvents.length };
-}
   </script>
 </body>
 </html>
