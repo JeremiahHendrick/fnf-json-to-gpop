@@ -103,7 +103,7 @@
   </div>
 
   <script>
-    // Minimal error surfacing (keeps page simple but not silent)
+    // Minimal error surfacing
     window.addEventListener('error', (e) => log('Runtime error: ' + (e.message || e.error || e), true));
     window.addEventListener('unhandledrejection', (e) => log('Unhandled rejection: ' + (e.reason && e.reason.message ? e.reason.message : e.reason), true));
 
@@ -126,7 +126,43 @@
 
     let fileHandle = null, fileNameBase = 'output';
 
-    // Live toggle of the log’s visibility (tiny QoL)
+    const LS_KEY = 'fnf2gpop_opts_v1';
+
+function loadOpts() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+    if ('side' in saved)    els.side.value = saved.side;
+    if ('seconds' in saved) els.seconds.checked = !!saved.seconds;
+    if ('shift' in saved)   els.shift.checked = !!saved.shift;
+    if ('anchor' in saved)  els.anchor.value = saved.anchor ?? '';
+    if ('offset' in saved)  els.offset.value = String(saved.offset);
+    if ('nudge' in saved)   els.nudge.checked = !!saved.nudge;
+    if ('showlog' in saved && els.showlog) els.showlog.checked = !!saved.showlog;
+  } catch(_) {}
+}
+
+function saveOpts() {
+  const toSave = {
+    side:   els.side.value,
+    seconds: !!els.seconds.checked,
+    shift:   !!els.shift.checked,
+    anchor:  els.anchor.value || null,
+    offset:  parseFloat(els.offset.value || '0') || 0,
+    nudge:   !!els.nudge.checked,
+    showlog: els.showlog ? !!els.showlog.checked : false,
+  };
+  try { localStorage.setItem(LS_KEY, JSON.stringify(toSave)); } catch(_) {}
+}
+
+// load on startup
+loadOpts();
+
+// save whenever anything changes
+for (const id of ['side','seconds','shift','anchor','offset','nudge','showlog']) {
+  if (els[id]) els[id].addEventListener('change', saveOpts);
+}
+
+    // Toggle of the log’s visibility
     els.showlog.addEventListener('change', () => {
       els.log.style.display = els.showlog.checked ? 'block' : 'none';
     });
