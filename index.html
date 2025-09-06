@@ -172,7 +172,7 @@
           />
         </div>
         <p class="hint">
-          Offset is added after anchoring. Use negative values if notes are
+          Offset is added after anchoring. Make the offset less if notes are
           slightly ahead of the audio.
         </p>
 
@@ -289,10 +289,9 @@
         } catch (_) {}
       }
 
-      // load on startup
       loadOpts();
 
-      // save whenever anything changes
+      // Save whenever anything changes
       for (const id of [
         "side",
         "seconds",
@@ -402,51 +401,6 @@ Tail → ${JSON.stringify(tail)}`
         return { sections: [], raw: data };
       }
 
-      // Return {t, nd, sus} (sus is sustain length in ms; ignored here)
-      function readNoteTriple(n) {
-        let t = NaN,
-          nd = NaN,
-          sus = 0;
-        if (Array.isArray(n)) {
-          if (n.length >= 2) {
-            t = Number(n[0]);
-            nd = Number(n[1]);
-          }
-          if (n.length >= 3 && Number.isFinite(Number(n[2])))
-            sus = Number(n[2]);
-        } else if (n && typeof n === "object") {
-          t = Number(
-            "strumTime" in n ? n.strumTime : "time" in n ? n.time : NaN
-          );
-          nd = Number(
-            "noteData" in n ? n.noteData : "note" in n ? n.note : NaN
-          );
-          const cand =
-            n.sustainLength ?? n.sustain ?? n.hold ?? n.length ?? n.duration;
-          if (cand != null && Number.isFinite(Number(cand))) sus = Number(cand);
-        }
-        if (!Number.isFinite(t) || !Number.isFinite(nd)) return null;
-        return { t, nd, sus: Math.max(0, sus) };
-      }
-
-      // Section-aware side picking
-      function belongsToSide(nd, side, mustHit) {
-        const left = nd < 4; // 0..3
-        if (mustHit === true) {
-          if (side === "bf") return left;
-          if (side === "opp") return !left;
-        } else if (mustHit === false) {
-          if (side === "bf") return !left;
-          if (side === "opp") return left;
-        } else {
-          if (side === "bf") return !left;
-          if (side === "opp") return left;
-        }
-        return true; // 'both'
-      }
-
-      // PRESS-ONLY events (0,2,4,6) — filter by raw noteData only.
-      // nd 0..3 => opponent; nd 4..7 => BF. No mustHitSection involved.
       function extractEvents(src, side) {
         const events = [];
         const bfTimes = [];
@@ -458,25 +412,57 @@ Tail → ${JSON.stringify(tail)}`
             sec && typeof sec === "object" && "sectionNotes" in sec
               ? sec.sectionNotes
               : sec;
+          const mustHit =
+            sec && typeof sec === "object" && "mustHitSection" in sec
+              ? !!sec.mustHitSection
+              : undefined;
           if (!Array.isArray(notes)) continue;
 
+          const norm = [];
+          let hasRaw = false;
           for (const n of notes) {
-            const got = readNoteTriple(n); // {t, nd, sus}
-            if (!got) continue;
-            let { t, nd } = got;
-
+            let t = NaN,
+              nd = NaN;
+            if (Array.isArray(n)) {
+              if (n.length >= 2) {
+                t = Number(n[0]);
+                nd = Number(n[1]);
+              }
+            } else if (n && typeof n === "object") {
+              t = Number(
+                "strumTime" in n ? n.strumTime : "time" in n ? n.time : NaN
+              );
+              nd = Number(
+                "noteData" in n ? n.noteData : "note" in n ? n.note : NaN
+              );
+            }
+            if (!Number.isFinite(t) || !Number.isFinite(nd)) continue;
             nd = ((nd % 8) + 8) % 8;
-            const isLeft = nd < 4; // opponent
-            const isRight = nd >= 4; // bf
+            if (nd >= 4) hasRaw = true;
+            norm.push({ t, nd });
+          }
 
-            if (side === "bf" && !isRight) continue;
-            if (side === "opp" && !isLeft) continue;
+          for (const { t, nd } of norm) {
+            // Decide owner
+            let owner;
+            if (hasRaw) {
+              owner = nd >= 4 ? "bf" : "opp";
+            } else {
+              const left = nd < 4;
+              if (mustHit === true)
+                owner = left ? "bf" : "opp"; // BF-left sections
+              else if (mustHit === false)
+                owner = left ? "opp" : "bf"; // BF-right sections
+              else owner = left ? "opp" : "bf"; // fallback
+            }
+
+            if (side !== "both" && side !== owner) continue;
 
             const col = nd % 4;
-            const pressLane = col * 2;
+            const lane = col * 2;
+            events.push({ t, lane });
 
-            events.push({ t, lane: pressLane });
-            if (isRight) bfTimes.push(t);
+            if (owner === "bf") bfTimes.push(t);
             else oppTimes.push(t);
           }
         }
@@ -561,7 +547,7 @@ Tail → ${JSON.stringify(tail)}`
             const m = safeMin(oppTimes);
             if (m != null) anchorMs = m;
           } else if (opts.anchor === "none") {
-            anchorMs = null; // respect shift later
+            anchorMs = null;
           }
         }
 
